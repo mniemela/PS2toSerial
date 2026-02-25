@@ -107,6 +107,20 @@ static void handleStream(char c) {
 	}
 }
 
+static inline void clearFlagsEnableStartConditionDetection() {
+	USISR = (1<<USISIF) | (1<<USIOIF);
+	USICR = (1<<USISIE) | (1<<USIWM1) | (1<<USICS1);
+}
+
+static void waitUntilPinDown(uint8_t mask) {
+	uint8_t timeOut = 255;
+	do {
+		_delay_us(5);
+		timeOut--;
+	}
+	while (timeOut && (PINB & mask));
+}
+
 static void handleTxEnd() {
 	//release SDA
 	DDRB = DDRB & ~(1<<PB5);
@@ -116,20 +130,10 @@ static void handleTxEnd() {
 	sei();
 	
 	//wait until SDA low
-	for(uint8_t i = 0; i<256; i++) {
-		_delay_us(5);
-		if (!(PINB & (1<<PB5))) {
-			break;
-		}
-	}
+	waitUntilPinDown(1<<PB5);
 	
 	//wait until SCL low
-	for(uint8_t i = 0; i<256; i++) {
-		_delay_us(1);
-		if (!(PINB & (1<<PB7))) {
-			break;
-		}
-	}
+	waitUntilPinDown(1<<PB7);
 	
 	//wait until SDA and SCL released
 	for(uint8_t i = 0; i<256; i++) {
@@ -139,9 +143,7 @@ static void handleTxEnd() {
 		}
 	}
 	
-	//enable start condition detection, change to falling edge mode
-	USISR = (1<<USISIF) | (1<<USIOIF);
-	USICR = (1<<USISIE) | (1<<USIWM1) | (1<<USICS1) | (1<<USICS0);
+	clearFlagsEnableStartConditionDetection();
 }
 
 static void handleTx2ndByte() {
@@ -278,9 +280,7 @@ void ps2_init(uint8_t sampleRate_) {
 	sampleRate = sampleRate_;
 	init_buf(&ps2TxBuf, PS2_TX_BUF_SIZE, ps2TxBuf_array);
 	
-	//enable start condition detection, and use two-wire mode on falling edge
-	USISR = (1<<USISIF) | (1<<USIOIF);
-	USICR = (1<<USISIE) | (1<<USIWM1) | (1<<USICS1) | (1<<USICS0);
+	clearFlagsEnableStartConditionDetection();
 	handleRxByte = &handleInit;
 }
 
@@ -300,9 +300,7 @@ void resetMouse() {
 	//turn off power
 	PORTB = PORTB | (1<<PB4);
 	_delay_ms(500);
-	//enable start condition detection, and use two-wire mode on falling edge
-	USISR = (1<<USISIF) | (1<<USIOIF);
-	USICR = (1<<USISIE) | (1<<USIWM1) | (1<<USICS1) | (1<<USICS0);
+	clearFlagsEnableStartConditionDetection();
 	PORTB = PORTB & ~(1<<PB4);
 	handleRxByte = &handleInit;
 }
@@ -318,9 +316,7 @@ static void handleRx() {
 		//second byte still has most significant bit, parity and stop bit in it
 		char secondByte = USIDR;
 		char receivedData = (previousByte << 1) + ((secondByte & 0x04) >> 2);
-		//clear counter and flags, enable start condition detection
-		USISR = (1<<USISIF) | (1<<USIOIF);
-		USICR = (1<<USISIE) | (1<<USIWM1) | (1<<USICS1) | (1<<USICS0);
+		clearFlagsEnableStartConditionDetection();
 		firstByteReceived = 0;
 		if (parity_even_bit(receivedData) == (secondByte & 0x02) >> 1) {
 			if (retryCount < 3) {
@@ -328,7 +324,7 @@ static void handleRx() {
 				retryCount++;
 			} else {
 				retryCount = 0;
-				resetMouse(0);
+				resetMouse();
 			}
 		} else {
 			retryCount = 0;
@@ -343,9 +339,18 @@ static void handleRx() {
 }
 
 ISR(USI_START_vect) {
+	//wait until SCL low. if timings are tight, might not arrive here until it's already gone down
+	for(uint8_t i = 0; i<255; i++) {
+		_delay_us(1);
+		if (!(PINB & (1<<PB7))) {
+			break;
+		}
+	}
+	
 	//clear counter and start condition interrupt flag, enable overflow interrupt
-	USISR = (1<<USISIF) | (1<<USIOIF);
-	USICR = (1<<USIOIE) | (1<<USIWM1) | (1<<USICS1) | (1<<USICS0);
+	//set counter to 1 because we already waited until SCL got low
+	USISR = (1<<USISIF) | (1<<USIOIF) | 1;
+	USICR = (1<<USIOIE) | (1<<USIWM1) | (1<<USICS1);
 	handleOverflow = &handleRx;
 }
 

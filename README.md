@@ -1,5 +1,5 @@
 # PS2toSerial
-PS/2 to serial converter using ATtiny2313 and MAX232. There are plenty of similar projects, but almost all of them are external, so here's my internal version
+PS/2 to serial converter using ATtiny4313 and MAX232. There are plenty of similar projects, but almost all of them are external, so here's my internal version
 which draws power from floppy power connector.
 
 <img src="documentation/adapter.jpg" width="480">
@@ -17,7 +17,7 @@ It has following features:
 * Supports hotplugging
 * Crystal oscillator for ensuring accurate baud rate
 * TVS diodes for ESD protection
-* Overcurrent protection using ATtiny2313's onboard analog comparator and a P-type MOSFET as a switch
+* Overcurrent protection using ATtiny4313's onboard analog comparator and a P-type MOSFET as a switch
 * No SMD components, so it's easy to assemble
 * Programming via SPI header
 

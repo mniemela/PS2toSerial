@@ -65,6 +65,7 @@ static char convertTo8Bit2sComplement(uint8_t sign, uint8_t value) {
 
 static void handleStream(char c) {
 	static char previous4thByte = 0;
+	static uint8_t skipped = 0;
 	rxArray[bytesReceived] = c;
 	bytesReceived++;
 	if (bytesReceived == 3) {
@@ -72,11 +73,15 @@ static void handleStream(char c) {
 		if (mouseType == '3') {
 			// no fourth byte coming if not wheeled mouse
 			bytesReceived = 0;
-		}
-		
-		// in theory buffer might run out in 1200 baud mode
-		if (getFreeBuffer() < 4)
+			// in theory buffer might run out in 1200 baud mode
+			if (getFreeBuffer() < 3)
+				return;
+		} else if (getFreeBuffer() < 4 ) {
+			skipped = 1;
 			return;
+		} else {
+			skipped = 0;
+		}
 		
 		// if movement is too large, just use maximum value that fits (two's complement!)
 		uint8_t xSign = rxArray[0] & 0x10;
@@ -100,9 +105,12 @@ static void handleStream(char c) {
 	}
 	else if (bytesReceived == 4) {
 		bytesReceived = 0;
+		//shouldn't happen but check just in case
+		if (skipped)
+			return;
+			
 		char byte4 = ((rxArray[0] & 0x04) << 2) | (convertTo8Bit2sComplement(rxArray[3] & 0xF0, rxArray[3] << 4) >> 4);
 		addTxData(byte4);
-		previous4thByte = byte4;
 		startTx();
 	}
 }
@@ -115,7 +123,7 @@ static inline void clearFlagsEnableStartConditionDetection() {
 static void waitUntilPinDown(uint8_t mask) {
 	uint8_t timeOut = 255;
 	do {
-		_delay_us(5);
+		_delay_us(1);
 		timeOut--;
 	}
 	while (timeOut && (PINB & mask));
@@ -129,6 +137,9 @@ static void handleTxEnd() {
 	USICR = (1<<USIWM1) | (1<<USICS1);
 	sei();
 	
+	// wait so that SDA has had time to rise
+	_delay_us(5);
+	
 	//wait until SDA low
 	waitUntilPinDown(1<<PB5);
 	
@@ -136,7 +147,7 @@ static void handleTxEnd() {
 	waitUntilPinDown(1<<PB7);
 	
 	//wait until SDA and SCL released
-	for(uint8_t i = 0; i<256; i++) {
+	for(uint8_t i = 0; i<255; i++) {
 		_delay_us(1);
 		if ((PINB & (1<<PB5)) && (PINB & (1<<PB7))) {
 			break;
@@ -340,12 +351,7 @@ static void handleRx() {
 
 ISR(USI_START_vect) {
 	//wait until SCL low. if timings are tight, might not arrive here until it's already gone down
-	for(uint8_t i = 0; i<255; i++) {
-		_delay_us(1);
-		if (!(PINB & (1<<PB7))) {
-			break;
-		}
-	}
+	waitUntilPinDown(1<<PB7);
 	
 	//clear counter and start condition interrupt flag, enable overflow interrupt
 	//set counter to 1 because we already waited until SCL got low

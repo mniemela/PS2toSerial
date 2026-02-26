@@ -60,7 +60,6 @@ avr/PS2toSerial/Release/*
 
 #IDE clutter
 avr/.vs/*
-avr/PS2toSerial/PS2toSerial.componentinfo.xml
 
 #Kicad clutter
 *.zip

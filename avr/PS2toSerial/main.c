@@ -48,7 +48,7 @@ void init() {
 	
 	//init pin change interrupt for detecting RTS low
 	PCMSK = (1<<PCINT2) | (1<<PCINT3);
-	GIMSK = 1<<PCIE;
+	GIMSK = 1<<PCIE0;
 
 	sei();
 }
@@ -62,7 +62,7 @@ int main(void)
     }
 }
 
-ISR(PCINT_vect) {
+ISR(PCINT0_vect) {
 	//send detection characters when RTS or DTR goes back up
 	static uint8_t previousState = 0;
 	uint8_t currentState = PINB & ((1<<PB2) | (1<<PB3));

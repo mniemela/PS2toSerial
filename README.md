@@ -48,3 +48,16 @@ Normally PS/2 host doesn't know whether mouse is disconnected or is just still, 
 seconds. If mouse is connected, it replys with an ACK or 0xFA, if it's disconnected, there's no clock signal which is detected.
 
 <img src="documentation/schema.png" width="640">
+
+\
+**BOM of specific components:**
+| Ref. | Part. no. | Note |
+|---|---|---|
+| Q1 | MTD20P06HDL | Any DPAK logic level P-channel enhancement-type MOSFET with similar pinout will work. |
+| U1 | ATtiny4313-PU | Microcontroller |
+| U2 | MAX232 | RS-232 transceiver |
+| R7 | 560mΩ resistor | Anything with max. dissipation > 600mW will work. |
+| Y1 | AS-18.432-20 | Other frequencies up to 20M can be used, but will require modifications to software. |
+| D2-D4 | P6KE6.8 | TVS diode with 5.8V working voltage |
+| J10 | MDC-206 | mini-DIN6 connector |
+| J12, J13 | AMT0440051DB0000G | M4 screw terminal |

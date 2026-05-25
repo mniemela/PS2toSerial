@@ -68,7 +68,18 @@ static void handleStream(char c) {
 	static uint8_t skipped = 0;
 	rxArray[bytesReceived] = c;
 	bytesReceived++;
-	if (bytesReceived == 3) {
+	if (bytesReceived == 2 && rxArray[0] == 0xAA && rxArray[1] == 0) {
+		//this is a workaround for KVM switches that apparently decide to
+		//regularly reset in the middle of normal operation.
+		//in theory these could be part of a normal movement packet,
+		//so we need to wait a bit to see whether next byte comes
+		
+		TIFR |= 1 << OCF1B;
+		TIMSK |= 1 << OCIE1B;
+	}
+	else if (bytesReceived == 3) {
+		//disable interrupt for KVM workaround
+		TIMSK &= ~(1 << OCIE1B);
 		
 		if (mouseType == '3') {
 			// no fourth byte coming if not wheeled mouse
@@ -286,6 +297,10 @@ void ps2_init(uint8_t sampleRate_) {
 	OCR1A = (uint16_t)((F_CPU) * 2.0 / 1024 + 0.5);
 	TCCR1B = 1 << WGM12;
 	
+	//also init an interrupt 5ms after timer reset
+	//as a KVM workaround, but don't enable it yet
+	OCR1B = (uint16_t)((F_CPU) * 0.005 / 1024 + 0.5);
+	
 	TIMSK |= 1 << OCIE1A;
 
 	sampleRate = sampleRate_;
@@ -324,6 +339,8 @@ static void handleRx() {
 	static char previousByte = 0;
 	static uint8_t retryCount = 0;
 	if (firstByteReceived) {
+		//clear timer1 counter as mouse is alive
+		TCNT1 = 0;
 		//second byte still has most significant bit, parity and stop bit in it
 		char secondByte = USIDR;
 		char receivedData = (previousByte << 1) + ((secondByte & 0x04) >> 2);
@@ -353,6 +370,9 @@ ISR(USI_START_vect) {
 	//wait until SCL low. if timings are tight, might not arrive here until it's already gone down
 	waitUntilPinDown(1<<PB7);
 	
+	//clear timer1 counter as mouse is alive
+	TCNT1 = 0;
+	
 	//clear counter and start condition interrupt flag, enable overflow interrupt
 	//set counter to 1 because we already waited until SCL got low
 	USISR = (1<<USISIF) | (1<<USIOIF) | 1;
@@ -361,8 +381,6 @@ ISR(USI_START_vect) {
 }
 
 ISR(USI_OVERFLOW_vect) {
-	//clear timer1 counter as mouse is alive
-	TCNT1 = 0;
 	handleOverflow();
 }
 
@@ -374,4 +392,14 @@ ISR(TIMER1_COMPA_vect) {
 	// send enable data reporting to check if mouse is still attached,
 	// as it shouldn't do anything except make mouse reply an ack
 	startPs2Tx(0xF4);
+}
+
+ISR(TIMER1_COMPB_vect) {
+	//discard previous bytes if KVM decided to reset in the middle of
+	//operation
+	bytesReceived = 0;
+	firstByteReceived = 0;
+	//disable interrupt for KVM workaround
+	TIMSK &= ~(1 << OCIE1B);
+	handleInit(0);
 }

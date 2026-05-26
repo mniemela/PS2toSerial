@@ -16,26 +16,40 @@
 
 void init() {
 	
-	//turn on pullups for unused pins and enable driving output low for PD4
-	PORTD = ~((1<<PD0) | (1<<PD1) | (1<<PD4));
+	//turn on pullups for jumpers and unused pins and enable driving output low for PD4
+	PORTD = ~(1<<PD1);
 	PORTB = 1 << PB6;
-	DDRD |= (1<<PD4);
 	
 	//turn off comparator digital inputs
 	DIDR = (1<<AIN1D) | (1<<AIN0D);
 	
-	_delay_us(3);
+	_delay_us(100);
 	
-	// check jumper for sample rate
-	uint8_t sampleRate = 40;
-	if (!(PIND & (1<<PD3))) {
-		sampleRate = 100;
-	} else if (!(PIND & (1<<PD5))) {
-		sampleRate = 200;
+	// check jumpers for sample rate and baud rate
+	uint8_t sampleRate = 0;
+	uint8_t highSpeedUart = !((1 << PIND0) & PIND);
+	if (highSpeedUart) {
+		if (((1 << PIND3) & PIND) && ((1 << PIND4) & PIND) )
+			sampleRate = 40;
+		else if ((1 << PIND3) & PIND)
+			sampleRate = 60;
+		else if ((1 << PIND4) & PIND)
+			sampleRate = 100;
+		else
+			sampleRate = 200;
+	} else {
+		if ((1 << PIND4) & PIND)
+			sampleRate = 40;
+		else
+			sampleRate = 20;
 	}
 	
-	uart_init(sampleRate > 40);
-	ps2_init(sampleRate);
+	//check jumpers for resolution
+	uint8_t resolution = (((1 << PIND5) | (1 << PIND6)) & PIND) >> 5;
+	
+	
+	uart_init(highSpeedUart);
+	ps2_init(sampleRate, resolution, highSpeedUart);
 	
 	//turn on device power
 	DDRB = 1<<PB4;

@@ -33,7 +33,9 @@ static uint8_t firstByteReceived = 0;
 static char parityAndStopBits;
 static char previousSentByte;
 static uint8_t bytesReceived = 0;
-static uint8_t sampleRate;
+static uint8_t sampleRate = 0;
+static uint8_t resolution = 0;
+static uint8_t highSpeedUart = 0;
 
 static char reverse(char byte) {
 	uint8_t maskUp = 0x01;
@@ -235,8 +237,10 @@ static void startPs2Tx(char c) {
 	handleOverflow = &handleTx2ndByte;
 }
 
-static void setSampleRate() {
+static void setSampleRateAndResolution() {
 	add(&ps2TxBuf, sampleRate);
+	add(&ps2TxBuf, 0xE8);
+	add(&ps2TxBuf, resolution);
 	add(&ps2TxBuf, 0xF4);
 	startPs2Tx(0xF3);
 }
@@ -248,11 +252,10 @@ static void handleInit(char c) {
 	} else if (c == 0x00) {
 		mouseType = '3';
 		
-		//check if wheel mouse only if requested sample rate is higher than 40.
-		//using wheel in 1200 baud mode would not make sense, as it would
-		//require dropping to 20 samples
-		if (sampleRate == 40) {
-			setSampleRate();
+		//check if wheel mouse only if in high speed mode or using 
+		//sample rate 20
+		if (!highSpeedUart && sampleRate != 20) {
+			setSampleRateAndResolution();
 			return;
 		}
 		
@@ -282,16 +285,16 @@ static void handleResponse(char c) {
 		resetMouse();
 	} else if (c == 0x00) {
 		//set sample rate and enable streaming
-		setSampleRate();
+		setSampleRateAndResolution();
 	} else if (c == 0x03) {
 		mouseType = 'Z';
-		setSampleRate();
+		setSampleRateAndResolution();
 	} else if (c == 0xFE) {
 		startPs2Tx(previousSentByte);
 	}
 }
 
-void ps2_init(uint8_t sampleRate_) {
+void ps2_init(uint8_t sampleRate_, uint8_t resolution_, uint8_t highSpeedUart_) {
 	
 	//init timer1 for interrupt every 2s, but don't start it yet
 	OCR1A = (uint16_t)((F_CPU) * 2.0 / 1024 + 0.5);
@@ -304,6 +307,8 @@ void ps2_init(uint8_t sampleRate_) {
 	TIMSK |= 1 << OCIE1A;
 
 	sampleRate = sampleRate_;
+	resolution = resolution_;
+	highSpeedUart = highSpeedUart_;
 	init_buf(&ps2TxBuf, PS2_TX_BUF_SIZE, ps2TxBuf_array);
 	
 	clearFlagsEnableStartConditionDetection();

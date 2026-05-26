@@ -8,7 +8,7 @@
 #ifndef PS2_H_
 #define PS2_H_
 
-void ps2_init(uint8_t sampleRate_);
+void ps2_init(uint8_t sampleRate_, uint8_t resolution_, uint8_t highSpeedUart_);
 char getMouseType();
 void resetMouse();
 

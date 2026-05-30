@@ -16,7 +16,7 @@
 
 void init() {
 	
-	//turn on pullups for jumpers and unused pins and enable driving output low for PD4
+	//turn on pullups for jumpers and unused pins
 	PORTD = ~(1<<PD1);
 	PORTB = 1 << PB6;
 	
@@ -60,7 +60,7 @@ void init() {
 	TCCR0B = 1 << CS01;
 	TIMSK |= (1 << OCIE0A);
 	
-	//init pin change interrupt for detecting RTS low
+	//init pin change interrupt for detecting RTS or DTR low
 	PCMSK = (1<<PCINT2) | (1<<PCINT3);
 	GIMSK = 1<<PCIE0;
 
@@ -80,8 +80,8 @@ ISR(PCINT0_vect) {
 	//send detection characters when RTS or DTR goes back up
 	static uint8_t previousState = 0;
 	uint8_t currentState = PINB & ((1<<PB2) | (1<<PB3));
-	uint8_t dtrValue = PINB & (1<<PB3);
-	uint8_t rtsValue = PINB & (1<<PB2);
+	uint8_t dtrValue = currentState & (1<<PB3);
+	uint8_t rtsValue = currentState & (1<<PB2);
 	if ((!dtrValue && (previousState & (1<<PB3))) || (!rtsValue && (previousState & (1<<PB2)))) {
 		char mouseType = getMouseType();
 		if (mouseType) {

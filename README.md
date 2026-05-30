@@ -10,10 +10,11 @@ This does essentially the same thing as other PS/2 to serial adapters: it interf
 
 It has following features:
 * Support for normal 1200 baud serial, or 9600 baud high speed mode
-* Support for wheel mouse in high speed mode
-* Sample rate is selected from 40/100/200 with a jumper. For higher than 40, 9600 baud serial is needed.
-* USB A connector, so no need for a passive USB->PS/2 -adapter
-* Header for PS/2 connector is also provided
+* Support for wheel mouse
+* Sample rate is selected from 20/40/60/100/200 with jumpers. For higher than 40, 9600 baud serial is needed.
+* Resolution is configured with jumpers
+* Option for USB A connector, so no need for a passive USB->PS/2 -adapter
+* Option for PS/2 connector is also provided
 * Supports hotplugging
 * Crystal oscillator for ensuring accurate baud rate
 * TVS diodes for ESD protection
@@ -21,15 +22,19 @@ It has following features:
 * No SMD components, so it's easy to assemble
 * Programming via SPI header
 
-Jumper J1 sets the sample rate. When it's open, 40 samples per second is used at default 1200 baud serial speed. In this mode mouse wheel is ignored,
-as that would require dropping sample rate to horrible 20 per second. When jumper is set to 1-2 or 2-3, 100 or 200 samples/s and 9600 baud serial speed
-are used.
+Jumpers J1 sets baud rate, closed is high speed mode. J2 and J3 sets sample rate as described in silkscreen, and J4 and J4 set resolution.
 
 Using 9600 baud serial speed requires modified mouse drivers, which can be found for example from this project:
 https://github.com/LimeProgramming/USB-serial-mouse-adapter/tree/main
 
-Note that there's no standard PS/2 header pinout, so if you use that always check that your PS/2 back panel matches the pinout!
+There are footprints for both USB-A and mini-DIN6 or PS/2 connector, only one of them should be populated.
 
+## KVM issues
+
+Some KVM switches ignore commands to set sample rate, which results in this adapter not working properly in 1200 baud mode. The adapter tries to set baud
+rate to configured value, but the KVM will ignore it and packets are received faster than they can be sent to PC and some of them need to be dropped. 
+This results in erratic mouse movement, but it can be avoided using high speed mode which you probably want to use anyways for reduced latency and
+possibility for higher sample rate.
 
 ## Technical details
 
@@ -47,6 +52,9 @@ mouse is connected.
 Normally PS/2 host doesn't know whether mouse is disconnected or is just still, so the adapter polls mouse by sending command enable data reporting or 0xF4 every two
 seconds. If mouse is connected, it replys with an ACK or 0xFA, if it's disconnected, there's no clock signal which is detected.
 
+Some KVM switches randomly reset in the middle of normal operation and send 0xAA and 0x00 as during boot, then stopping to send movement data. This adapter attempts
+to detect this situation and recover from it.
+
 <img src="documentation/schema.png" width="640">
 
 \
@@ -61,3 +69,4 @@ seconds. If mouse is connected, it replys with an ACK or 0xFA, if it's disconnec
 | D2-D4 | P6KE6.8 | TVS diode with 5.8V working voltage |
 | J10 | MDC-206 | mini-DIN6 connector |
 | J12, J13 | AMT0440051DB0000G | M4 screw terminal |
+| C6 | ??? | Exact value of this capacitor isn't important. |

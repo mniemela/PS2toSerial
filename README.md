@@ -70,3 +70,8 @@ to detect this situation and recover from it.
 | J10 | MDC-206 | mini-DIN6 connector |
 | J12, J13 | AMT0440051DB0000G | M4 screw terminal |
 | C6 | ??? | Exact value of this capacitor isn't important. |
+
+## Building software and MCU fuse settings
+
+This has been built with Microchip studio, currently there's no Makefile for other toolchains. When programming the MCU, fuses must also be set. Correct setting for
+high fuse is 0xDF and for low fuse 0xFF.

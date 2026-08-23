@@ -62,7 +62,7 @@ avr/PS2toSerial/Release/*
 avr/.vs/*
 
 #Kicad clutter
-*.zip
+pcb/*.zip
 pcb/gerber/*
 pcb/ps2_serial-backups
 pcb/fp-info-cache

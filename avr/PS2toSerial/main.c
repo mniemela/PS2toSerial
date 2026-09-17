@@ -99,5 +99,5 @@ ISR(TIMER0_COMPA_vect) {
 	
 	// turn power off after 1ms of overcurrent
 	if (counter > 10)
-	PORTB = PORTB | (1<<PB4);
+		PORTB = PORTB | (1<<PB4);
 }

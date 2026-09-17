@@ -12,5 +12,7 @@ void uart_init(uint8_t highSpeedMode);
 void startTx();
 void addTxData(char);
 uint8_t getFreeBuffer();
+uint8_t getUsedBuffer();
+void setCallback(void (*callback_)(uint8_t, int8_t, int8_t, uint8_t));
 
 #endif

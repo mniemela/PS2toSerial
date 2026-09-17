@@ -15,13 +15,10 @@
 char txBuf_array[TX_BUF_SIZE];
 struct ringBuffer txBuf;
 
-static volatile int txOn;
+void (*callback)(uint8_t, int8_t, int8_t, uint8_t);
 
 void startTx() {
-	if (txOn)
-		return;
 	UCSRB |= 1 << UDRIE;
-	txOn = 1;
 }
 
 void uart_init(uint8_t highSpeedMode) {
@@ -49,12 +46,29 @@ uint8_t getFreeBuffer() {
 	return TX_BUF_SIZE - elements(&txBuf);
 }
 
+uint8_t getUsedBuffer() {
+	return elements(&txBuf);
+}
+
+void setCallback(void (*callback_)(uint8_t, int8_t, int8_t, uint8_t)) {
+	callback = callback_;
+	if (callback != 0)
+		UCSRB |= 1 << TXCIE;
+}
+
+ISR(USART_TX_vect) {
+	UCSRB &= ~(1 << TXCIE);
+	if (callback != 0) {
+		callback(0,0,0,1);
+	}
+}
+
 ISR(USART_UDRE_vect) {
 	if (elements(&txBuf) > 0)
 		UDR = remove(&txBuf);
 	//TX complete
 	else {
 		UCSRB &= ~(1 << UDRIE);
-		txOn = 0;
+		// if combining packets, send last data
 	}
 }

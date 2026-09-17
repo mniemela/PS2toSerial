@@ -35,7 +35,14 @@ static char previousSentByte;
 static uint8_t bytesReceived = 0;
 static uint8_t sampleRate;
 
-static char reverse(char byte) {
+volatile static uint8_t skipped = 0;
+static char previous4thByte = 0;
+volatile static uint8_t previousButtons = 0;
+volatile static uint16_t previousXMovement = 0;
+volatile static uint16_t previousYMovement = 0;
+volatile static uint8_t previousZMovement = 0;
+
+static inline char reverse(char byte) {
 	uint8_t maskUp = 0x01;
 	uint8_t maskDown = 0x80;
 	uint8_t result = 0;
@@ -46,26 +53,84 @@ static char reverse(char byte) {
 	return result;
 }
 
-static char convertTo8Bit2sComplement(uint8_t sign, uint8_t value) {
+static inline int8_t convertTo8Bit2sComplement(uint8_t sign, uint8_t value) {
 	if (sign) {
 		if (value & 0x80) {
-			return value;
+			return (int8_t)value;
 		}
 		else {
-			return 0x80;
+			return -127;
 		}
 	}
-	else if (value > 0x7F) {
-		return 0x7F;
+	else if (value > 127) {
+		return 127;
 	}
 	else {
-		return value;
+		return (int8_t)value;
 	}
 }
 
+static inline int8_t truncateTo8BitInt(int16_t value) {
+	if (value > 127) {
+		return 127;
+	}
+	else if (value < -127) {
+		return -127;
+	}
+	else {
+		return (int8_t)value;
+	}
+}
+
+//wheel movement is represented by 4 bit int
+static inline char truncateTo4BitInt(int8_t value) {
+	if (value > 7)
+		value = 7;
+	else if (value < -8)
+		value = -8;
+	return (((uint8_t)value & 0x80) >> 4) | ((uint8_t)value & 0x0F);
+}
+
+static void sendPacket(uint8_t buttons, int8_t xMovement, int8_t yMovement, uint8_t asCallback) {
+
+	//enable interrupts so that this won't mess up anything timing-critical
+	sei();
+
+	if (skipped) {
+		buttons |= previousButtons;
+		xMovement = truncateTo8BitInt(previousXMovement + xMovement);
+		yMovement = truncateTo8BitInt(previousYMovement + yMovement);
+		previousXMovement = 0;
+		previousYMovement = 0;
+		if (mouseType == '3')
+			previousButtons = 0;
+	}
+	
+	char byte1 = (1<<6) | ((buttons & 0x01)<<5) | ((buttons & 0x02)<<3) | (((char)yMovement & 0xC0)>>4) | (((char)xMovement & 0xC0)>>6);
+	char byte2 = xMovement & 0x3F;
+	char byte3 = yMovement & 0x3F;
+	char byte4 = (buttons & 0x04) << 3;
+	
+	addTxData(byte1);
+	addTxData(byte2);
+	addTxData(byte3);
+			
+	if (mouseType == '3' && (byte4 || previous4thByte)) {
+		addTxData(byte4);
+		previous4thByte = byte4;
+	}
+	else if (mouseType == 'Z' && asCallback) {
+		// need to add fourth packet if using wheel mouse
+		addTxData(byte4 | truncateTo4BitInt(previousZMovement));
+		previousZMovement = 0;
+		previousButtons = 0;
+	}
+	startTx();
+	setCallback(0);
+	skipped = 0;
+}
+
 static void handleStream(char c) {
-	static char previous4thByte = 0;
-	static uint8_t skipped = 0;
 	rxArray[bytesReceived] = c;
 	bytesReceived++;
 	if (bytesReceived == 2 && rxArray[0] == 0xAA && rxArray[1] == 0) {
@@ -84,43 +149,46 @@ static void handleStream(char c) {
 		if (mouseType == '3') {
 			// no fourth byte coming if not wheeled mouse
 			bytesReceived = 0;
-			// in theory buffer might run out in 1200 baud mode
-			if (getFreeBuffer() < 3)
-				return;
-		} else if (getFreeBuffer() < 4 ) {
-			skipped = 1;
-			return;
-		} else {
-			skipped = 0;
 		}
 		
 		// if movement is too large, just use maximum value that fits (two's complement!)
 		uint8_t xSign = rxArray[0] & 0x10;
 		uint8_t ySign = rxArray[0] & 0x20;
-		char xMovement = convertTo8Bit2sComplement(xSign, rxArray[1]);
-		char yMovement = (int)convertTo8Bit2sComplement(ySign, rxArray[2]) * -1;
-		char byte1 = (1<<6) | ((rxArray[0] & 0x01)<<5) | ((rxArray[0] & 0x02)<<3) | ((yMovement & 0xC0)>>4) | ((xMovement & 0xC0)>>6);
-		char byte2 = xMovement & 0x3F;
-		char byte3 = yMovement & 0x3F;
-		char byte4 = (rxArray[0] & 0x04) << 3;
+		int8_t xMovement = convertTo8Bit2sComplement(xSign, rxArray[1]);
+		int8_t yMovement = convertTo8Bit2sComplement(ySign, rxArray[2]) * -1;
+		uint8_t buttons = (rxArray[0] & 0x01) | (rxArray[0] & 0x02) | (rxArray[0] & 0x04);
 		
-		addTxData(byte1);
-		addTxData(byte2);
-		addTxData(byte3);
-		
-		if (mouseType == '3' && (byte4 || previous4thByte)) {
-			addTxData(byte4);
-			previous4thByte = byte4;
+		// some KVM switches ignore command to set sample rate and buffer can get full in
+		// 1200 baud mode. combine several packets into one in that case
+		if (skipped || (getUsedBuffer() > 0)) {
+			previousXMovement += xMovement;
+			previousYMovement += yMovement;
+			previousButtons |= buttons;
+			skipped = 1;
+			// a callback is needed so that the last packet will be sent after tx is complete
+			setCallback(&sendPacket);
 		}
-		startTx();
+		else {
+			sendPacket(buttons, xMovement, yMovement, 0);
+		}
 	}
 	else if (bytesReceived == 4) {
 		bytesReceived = 0;
-		//shouldn't happen but check just in case
-		if (skipped)
+		
+		if (skipped) {
+			int8_t wheelMovement = 0;
+		
+			//convert to int8_t
+			if (rxArray[3] & 0xF8)
+				wheelMovement = (int8_t)(0xF8 | (rxArray[3] & 0x07));
+			else
+				wheelMovement = (int8_t)(rxArray[3] & 0x07);
+			previousZMovement += wheelMovement;
 			return;
-			
-		char byte4 = ((rxArray[0] & 0x04) << 2) | (convertTo8Bit2sComplement(rxArray[3] & 0xF0, rxArray[3] << 4) >> 4);
+		}
+		
+		char byte4 = (((rxArray[0] | previousButtons) & 0x04) << 2) | (rxArray[3] & 0x0F);
+		previousZMovement = 0;
 		addTxData(byte4);
 		startTx();
 	}
@@ -131,7 +199,7 @@ static inline void clearFlagsEnableStartConditionDetection() {
 	USICR = (1<<USISIE) | (1<<USIWM1) | (1<<USICS1);
 }
 
-static void waitUntilPinDown(uint8_t mask) {
+static inline void waitUntilPinDown(uint8_t mask) {
 	uint8_t timeOut = 255;
 	do {
 		_delay_us(1);
@@ -331,7 +399,7 @@ void resetMouse() {
 	handleRxByte = &handleInit;
 }
 
-char getMouseType() {
+inline char getMouseType() {
 	return mouseType;
 }
 
@@ -399,6 +467,11 @@ ISR(TIMER1_COMPB_vect) {
 	//operation
 	bytesReceived = 0;
 	firstByteReceived = 0;
+	previousButtons = 0;
+	previousXMovement = 0;
+	previousYMovement = 0;
+	skipped = 0;
+	setCallback(0);
 	//disable interrupt for KVM workaround
 	TIMSK &= ~(1 << OCIE1B);
 	handleInit(0);

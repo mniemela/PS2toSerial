@@ -21,6 +21,7 @@ It has following features:
 * Overcurrent protection using ATtiny4313's onboard analog comparator and a P-type MOSFET as a switch
 * No SMD components, so it's easy to assemble
 * Programming via SPI header
+* Supports combining movement packets in 1200 baud mode as a KVM workaround
 
 Jumpers J1 sets baud rate, closed is high speed mode. J2 and J3 sets sample rate as described in silkscreen, and J4 and J4 set resolution.
 
@@ -31,10 +32,11 @@ There are footprints for both USB-A and mini-DIN6 or PS/2 connector, only one of
 
 ## KVM issues
 
-Some KVM switches ignore commands to set sample rate, which results in this adapter not working properly in 1200 baud mode. The adapter tries to set baud
-rate to configured value, but the KVM will ignore it and packets are received faster than they can be sent to PC and some of them need to be dropped. 
-This results in erratic mouse movement, but it can be avoided using high speed mode which you probably want to use anyways for reduced latency and
-possibility for higher sample rate.
+Some KVM switches ignore commands to set sample rate. The adapter tries to set baud rate to configured value, but the KVM will ignore 
+it and packets are received faster than they can be sent to PC. As a new feature, this adapter combines data in movement packets
+so that they don't have to be dropped.
+
+Also, some KVM switches randomly reset in middle of normal operation. There's a workaround for this as well.
 
 ## Technical details
 
